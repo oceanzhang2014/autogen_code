@@ -50,8 +50,15 @@ if errorlevel 1 (
 )
 
 echo.
+echo 正在检查并设置远程仓库...
+git remote set-url origin https://github.com/oceanzhang2014/autogen_code.git
+
+echo 当前远程仓库:
+git remote -v
+
+echo.
 echo 正在获取远程最新更改并rebase...
-git pull --rebase origin main
+git pull --rebase origin master
 
 if errorlevel 1 (
     echo 注意: 可能是首次推送或有冲突，将尝试直接推送...
@@ -59,7 +66,7 @@ if errorlevel 1 (
 
 echo.
 echo 正在推送到GitHub...
-git push -u origin main
+git push -u origin master
 
 if errorlevel 1 (
     echo 推送失败! 请检查网络连接和权限。
@@ -72,7 +79,8 @@ echo ========================================
 echo    Git操作完成成功!
 echo ========================================
 echo 提交信息: %msg%
-echo 推送分支: main
+echo 推送分支: master
+echo GitHub仓库: https://github.com/oceanzhang2014/autogen_code
 echo.
 
 pause
