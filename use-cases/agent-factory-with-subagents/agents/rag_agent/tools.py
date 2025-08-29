@@ -2,8 +2,7 @@
 
 from typing import Optional, List, Dict, Any
 from pydantic_ai import RunContext
-from pydantic import BaseModel, Field
-import asyncpg
+from pydantic import BaseModel
 import json
 from dependencies import AgentDependencies
 

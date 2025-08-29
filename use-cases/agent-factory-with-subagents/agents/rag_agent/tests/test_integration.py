@@ -3,14 +3,13 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 import asyncio
-from pydantic_ai.models.test import TestModel
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.messages import ModelTextResponse
 
 from ..agent import search_agent, search, interactive_search, SearchResponse
 from ..dependencies import AgentDependencies
 from ..settings import load_settings
-from ..tools import semantic_search, hybrid_search, auto_search
+from ..tools import semantic_search, auto_search
 
 
 class TestEndToEndSearch:

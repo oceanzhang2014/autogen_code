@@ -6,7 +6,7 @@ import asyncpg
 import openai
 
 from ..dependencies import AgentDependencies
-from ..settings import Settings, load_settings
+from ..settings import load_settings
 
 
 class TestAgentDependencies:

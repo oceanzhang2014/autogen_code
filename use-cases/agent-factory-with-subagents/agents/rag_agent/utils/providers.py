@@ -3,7 +3,6 @@ Simplified provider configuration for OpenAI models only.
 """
 
 import os
-from typing import Optional
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 import openai

@@ -1,45 +1,286 @@
-# Context Engineering Template
+# AutoGen Multi-Agent Code Generation System
 
-A comprehensive template for getting started with Context Engineering - the discipline of engineering context for AI coding assistants so they have the information necessary to get the job done end to end.
+A production-ready AutoGen multi-agent system that enables collaborative code generation using specialized AI agents. Built with Flask backend, real-time streaming, and multi-provider model support.
 
-> **Context Engineering is 10x better than prompt engineering and 100x better than vibe coding.**
+> **Implemented using Context Engineering principles - a comprehensive approach to AI system development.**
+
+## 🌟 Features
+
+- **4 Specialized Agents**: CodeGenerator, QualityChecker, CodeOptimizer, UserProxy
+- **Multi-Provider Support**: DeepSeek, Moonshot, Alibaba, OpenAI, Ollama
+- **Real-time Streaming**: Live updates during agent collaboration
+- **Web Interface**: Modern HTML/CSS/JS frontend with user approval workflow
+- **Security Built-in**: Code safety scanning and input validation
+- **Production Ready**: Comprehensive testing, error handling, and deployment guides
 
 ## 🚀 Quick Start
 
 ```bash
-# 1. Clone this template
-git clone https://github.com/coleam00/Context-Engineering-Intro.git
+# 1. Clone the repository
+git clone <repository-url>
 cd Context-Engineering-Intro
 
-# 2. Set up your project rules (optional - template provided)
-# Edit CLAUDE.md to add your project-specific guidelines
+# 2. Set up virtual environment
+conda activate autogen-project
+# 3. Install dependencies
+pip install -r requirements.txt
 
-# 3. Add examples (highly recommended)
-# Place relevant code examples in the examples/ folder
+# 4. Configure environment variables
+cp .env.example .env
+# Edit .env with your API keys
 
-# 4. Create your initial feature request
-# Edit INITIAL.md with your feature requirements
+# 5. Run the application
+python run.py
 
-# 5. Generate a comprehensive PRP (Product Requirements Prompt)
-# In Claude Code, run:
-/generate-prp INITIAL.md
-
-# 6. Execute the PRP to implement your feature
-# In Claude Code, run:
-/execute-prp PRPs/your-feature-name.md
+# 6. Open browser
+# Visit http://localhost:5011
 ```
+
+**📖 For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md)**
 
 ## 📚 Table of Contents
 
-- [What is Context Engineering?](#what-is-context-engineering)
-- [Template Structure](#template-structure)
-- [Step-by-Step Guide](#step-by-step-guide)
-- [Writing Effective INITIAL.md Files](#writing-effective-initialmd-files)
-- [The PRP Workflow](#the-prp-workflow)
-- [Using Examples Effectively](#using-examples-effectively)
-- [Best Practices](#best-practices)
+- [System Architecture](#system-architecture)
+- [Agent Roles](#agent-roles)
+- [API Endpoints](#api-endpoints)
+- [Configuration](#configuration)
+- [Development](#development)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Context Engineering Background](#context-engineering-background)
 
-## What is Context Engineering?
+## 🏗️ System Architecture
+
+The system follows a multi-agent architecture using Microsoft AutoGen framework:
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Web Frontend  │───▶│   Flask Backend  │───▶│  Agent Manager  │
+│                 │    │                  │    │                 │
+│ • HTML/CSS/JS   │    │ • REST API       │    │ • Session Mgmt  │
+│ • Real-time UI  │    │ • Streaming      │    │ • Orchestration │
+│ • User Approval │    │ • Session Mgmt   │    │ • Error Handling│
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                                                         │
+                                               ┌─────────▼─────────┐
+                                               │ RoundRobinGroupChat│
+                                               └─────────┬─────────┘
+                      ┌────────────────────────────────┼────────────────────────────────┐
+                      │                                │                                │
+            ┌─────────▼──────────┐            ┌─────────▼──────────┐            ┌─────────▼──────────┐
+            │   CodeGenerator    │            │  QualityChecker    │            │  CodeOptimizer     │
+            │                    │            │                    │            │                    │
+            │ • Requirements     │            │ • Code Review      │            │ • Performance      │
+            │ • Implementation   │            │ • Best Practices   │            │ • Optimization     │
+            │ • Documentation    │            │ • Security Scan    │            │ • Refactoring      │
+            └────────────────────┘            └────────────────────┘            └────────────────────┘
+                                                         │
+                                               ┌─────────▼──────────┐
+                                               │   UserProxy        │
+                                               │                    │
+                                               │ • User Interaction │
+                                               │ • Approval Flow    │
+                                               │ • Final Decision   │
+                                               └────────────────────┘
+```
+
+## 🤖 Agent Roles
+
+### CodeGenerator Agent
+- **Purpose**: Primary code implementation
+- **Responsibilities**: 
+  - Analyze requirements and create initial code
+  - Follow language best practices
+  - Generate comprehensive documentation
+  - Handle complex logic implementation
+
+### QualityChecker Agent  
+- **Purpose**: Code quality assurance
+- **Responsibilities**:
+  - Review code for bugs and issues
+  - Ensure coding standards compliance
+  - Perform security analysis
+  - Validate against requirements
+
+### CodeOptimizer Agent
+- **Purpose**: Performance and efficiency optimization
+- **Responsibilities**:
+  - Optimize algorithm efficiency
+  - Improve code structure and readability
+  - Suggest performance enhancements
+  - Refactor for maintainability
+
+### UserProxy Agent
+- **Purpose**: Human-AI interaction bridge
+- **Responsibilities**:
+  - Present final code to user
+  - Handle approval/rejection workflow
+  - Manage user feedback integration
+  - Control conversation termination
+
+## 🔌 API Endpoints
+
+### POST `/api/generate`
+Start code generation workflow
+```json
+{
+  "requirements": "Create a function to calculate prime numbers",
+  "language": "python",
+  "context": "For use in mathematical computations",
+  "max_iterations": 3
+}
+```
+
+### GET `/api/stream/{session_id}`
+Real-time agent collaboration stream (Server-Sent Events)
+
+### POST `/api/approve` 
+User approval/rejection of generated code
+```json
+{
+  "session_id": "uuid",
+  "action": "approve|reject",
+  "feedback": "Optional feedback message"
+}
+```
+
+### GET `/api/status/{session_id}`
+Get session status and information
+
+### GET `/api/models`
+List available model configurations
+
+## ⚙️ Configuration
+
+### Environment Variables (.env)
+```bash
+# Required
+SECRET_KEY=your-secret-key
+DEEPSEEK_API_KEY=your-api-key
+
+# Optional model providers
+MOONSHOT_API_KEY=your-moonshot-key
+ALIBABA_API_KEY=your-alibaba-key
+OPENAI_API_KEY=your-openai-key
+OLLAMA_BASE_URL=http://localhost:11434
+
+# Application settings
+HOST=0.0.0.0
+PORT=5000
+LOG_LEVEL=INFO
+```
+
+### Model Configuration (config/models.yaml)
+```yaml
+models:
+  deepseek:
+    provider: "deepseek"
+    config:
+      model: "deepseek-chat"
+      api_key: "${DEEPSEEK_API_KEY}"
+      base_url: "https://api.deepseek.com"
+```
+
+### Agent Configuration (config/agents.yaml)
+```yaml
+agents:
+  code_generator:
+    system_prompt: "You are a senior software engineer..."
+    temperature: 0.7
+    max_tokens: 2000
+```
+
+## 💻 Development
+
+### Project Structure
+```
+├── agents/                 # Agent implementations
+│   ├── code_generator.py
+│   ├── quality_checker.py
+│   ├── code_optimizer.py
+│   └── user_proxy.py
+├── config/                 # Configuration files
+│   ├── models.yaml
+│   └── agents.yaml
+├── models/                 # Model management
+│   ├── config.py
+│   └── providers.py
+├── utils/                  # Utilities
+│   ├── security.py
+│   ├── session.py
+│   └── streaming.py
+├── web/                    # Flask application
+│   ├── app.py
+│   ├── routes.py
+│   └── static/
+├── tests/                  # Test suite
+└── run.py                  # Application entry point
+```
+
+### Adding New Agents
+1. Create agent file in `agents/`
+2. Add configuration to `config/agents.yaml`
+3. Update team creation in `utils/session.py`
+4. Add tests in `tests/test_agents.py`
+
+### Adding Model Providers
+1. Add provider config to `config/models.yaml`
+2. Update `models/providers.py` if needed
+3. Test with health check endpoint
+
+## 🧪 Testing
+
+Run the comprehensive test suite:
+```bash
+# All tests (43 tests)
+python -m pytest tests/ -v
+
+# Specific test categories
+python -m pytest tests/test_agents.py -v      # Agent tests
+python -m pytest tests/test_web.py -v        # Web API tests
+python -m pytest tests/test_models.py -v     # Model tests
+python -m pytest tests/test_integration.py -v # Integration tests
+
+# Coverage report
+python -m pytest tests/ --cov=. --cov-report=html
+```
+
+### Test Categories
+- **Agent Tests**: Agent creation, configuration, behavior
+- **Web Tests**: API endpoints, request handling, CORS
+- **Model Tests**: Configuration validation, provider management
+- **Integration Tests**: End-to-end workflows, error handling
+
+## 🚀 Deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for comprehensive deployment instructions including:
+
+- Environment setup
+- Production configuration
+- Docker deployment
+- Scaling considerations
+- Security best practices
+- Monitoring and logging
+
+### Quick Production Start
+```bash
+# Using Gunicorn (Linux/macOS)
+gunicorn -w 4 -b 0.0.0.0:5011 --timeout 300 "web.app:create_app()"
+
+# Using Waitress (Windows)
+waitress-serve --host=0.0.0.0 --port=5000 --call web.app:create_app
+```
+
+## 📊 Monitoring
+
+- **Health Check**: `GET /health`
+- **Log Files**: `autogen_system.log`
+- **Metrics**: Response times, model usage, session counts
+- **Errors**: Automatic error tracking and logging
+
+---
+
+## Context Engineering Background
 
 Context Engineering represents a paradigm shift from traditional prompt engineering:
 

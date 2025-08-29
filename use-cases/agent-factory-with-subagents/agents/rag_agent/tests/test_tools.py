@@ -1,11 +1,9 @@
 """Test search tools functionality."""
 
 import pytest
-from unittest.mock import AsyncMock, patch
 from pydantic_ai import RunContext
 
 from ..tools import semantic_search, hybrid_search, auto_search, SearchResult
-from ..dependencies import AgentDependencies
 
 
 class TestSemanticSearch:

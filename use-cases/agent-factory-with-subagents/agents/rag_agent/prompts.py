@@ -1,7 +1,6 @@
 """System prompts for Semantic Search Agent."""
 
 from pydantic_ai import RunContext
-from typing import Optional
 from dependencies import AgentDependencies
 
 

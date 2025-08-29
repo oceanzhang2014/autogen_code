@@ -2,7 +2,7 @@
 
 import pytest
 import asyncio
-from typing import AsyncGenerator, Dict, Any, List
+from typing import Dict, Any, List
 from unittest.mock import AsyncMock, MagicMock
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.models.function import FunctionModel

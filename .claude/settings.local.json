@@ -17,7 +17,16 @@
       "Bash(python -m pytest:*)",
       "Bash(python3 -m pytest:*)",
       "WebFetch(domain:docs.anthropic.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:microsoft.github.io)",
+      "WebSearch",
+      "WebFetch(domain:pypi.org)",
+      "Bash(pip install:*)",
+      "Bash(venv_linuxScriptsactivate)",
+      "Bash(timeout:*)",
+      "Bash(git remote remove:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)"
     ],
     "deny": []
   }

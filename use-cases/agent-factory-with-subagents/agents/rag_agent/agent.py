@@ -1,7 +1,6 @@
 """Main agent implementation for Semantic Search."""
 
-from pydantic_ai import Agent, RunContext
-from typing import Any
+from pydantic_ai import Agent
 
 from providers import get_llm_model
 from dependencies import AgentDependencies
