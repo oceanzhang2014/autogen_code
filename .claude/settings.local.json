@@ -30,7 +30,8 @@
       "Bash(del:*)",
       "Bash(rd:*)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }
