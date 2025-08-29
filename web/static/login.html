@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoGen Multi-Agent System - 登录</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            backdrop-filter: blur(10px);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .login-header h1 {
+            color: #333;
+            margin-bottom: 0.5rem;
+            font-size: 1.8rem;
+        }
+
+        .login-header p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+            background: #fff;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .login-btn:active {
+            transform: translateY(0);
+        }
+
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            text-align: center;
+            display: none;
+        }
+
+        .success-message {
+            background: #efe;
+            color: #3c3;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            text-align: center;
+            display: none;
+        }
+
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .loading .login-btn {
+            background: #ccc;
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                margin: 1rem;
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1>🤖 AutoGen 系统</h1>
+            <p>多智能体系统管理平台</p>
+        </div>
+
+        <div id="error-message" class="error-message"></div>
+        <div id="success-message" class="success-message"></div>
+
+        <form id="login-form">
+            <div class="form-group">
+                <label for="username">用户名</label>
+                <input 
+                    type="text" 
+                    id="username" 
+                    name="username" 
+                    required 
+                    autocomplete="username"
+                    placeholder="请输入用户名"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="password">密码</label>
+                <input 
+                    type="password" 
+                    id="password" 
+                    name="password" 
+                    required 
+                    autocomplete="current-password"
+                    placeholder="请输入密码"
+                >
+            </div>
+
+            <button type="submit" class="login-btn">登录</button>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const container = document.querySelector('.login-container');
+            const errorDiv = document.getElementById('error-message');
+            const successDiv = document.getElementById('success-message');
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            // Hide previous messages
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+            
+            // Show loading state
+            container.classList.add('loading');
+
+            try {
+                // Determine the correct API path based on current URL
+                const currentPath = window.location.pathname;
+                let apiPath = '/api/login';
+                
+                // If we're in the /autogen/ context, use the full path
+                if (currentPath.includes('/autogen/')) {
+                    apiPath = '/autogen/api/login';
+                }
+                
+                const response = await fetch(apiPath, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Login successful
+                    successDiv.textContent = '登录成功！正在跳转...';
+                    successDiv.style.display = 'block';
+                    
+                    // Redirect to main application
+                    setTimeout(() => {
+                        // Redirect to the correct path based on current context
+                        const currentPath = window.location.pathname;
+                        if (currentPath.includes('/autogen/')) {
+                            window.location.href = '/autogen/';
+                        } else {
+                            window.location.href = '/';
+                        }
+                    }, 1000);
+                } else {
+                    // Login failed
+                    errorDiv.textContent = data.error || '登录失败，请检查用户名和密码';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                errorDiv.textContent = '网络错误，请稍后重试';
+                errorDiv.style.display = 'block';
+            } finally {
+                // Remove loading state
+                container.classList.remove('loading');
+            }
+        });
+
+        // Auto-focus username field
+        document.getElementById('username').focus();
+    </script>
+</body>
+</html>

@@ -3,7 +3,7 @@ Main Flask application factory.
 """
 import os
 import logging
-from flask import Flask
+from flask import Flask, redirect, request
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -26,6 +26,7 @@ def create_app(testing: bool = False) -> Flask:
     # Configuration
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key")
     app.config["DEBUG"] = os.getenv("FLASK_DEBUG", "False").lower() == "true"
+    app.config["PERMANENT_SESSION_LIFETIME"] = 86400  # 24 hours
     
     if testing:
         app.config["TESTING"] = True
@@ -51,10 +52,19 @@ def create_app(testing: bool = False) -> Flask:
         """Health check endpoint."""
         return {"status": "healthy", "service": "autogen-multi-agent-system"}
     
+    # Authentication routes
+    @app.route("/login.html")
+    def login_page():
+        """Serve login page."""
+        return app.send_static_file("login.html")
+    
     # Serve static files for frontend
     @app.route("/")
     def index():
         """Serve main frontend page."""
+        from utils.auth import is_authenticated
+        if not is_authenticated():
+            return redirect("/login.html")
         return app.send_static_file("index.html")
     
     return app

@@ -13,6 +13,7 @@ from models.config import CodeGenerationRequest, ConfigLoader
 from models.providers import get_model_manager
 from utils.session import SessionManager, create_agent_team
 from utils.streaming import StreamingManager
+from utils.auth import verify_credentials, login_user, logout_user, login_required
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,90 @@ streaming_manager = StreamingManager()
 config_loader = ConfigLoader()
 
 
+@api_bp.route("/login", methods=["POST"])
+def login():
+    """
+    Handle user login.
+    
+    Returns:
+        JSON response with login status
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        username = data.get("username", "").strip()
+        password = data.get("password", "")
+        
+        if not username or not password:
+            return jsonify({"error": "用户名和密码不能为空"}), 400
+        
+        if verify_credentials(username, password):
+            login_user(username)
+            logger.info(f"User {username} logged in successfully")
+            return jsonify({
+                "status": "success",
+                "message": "登录成功",
+                "username": username
+            })
+        else:
+            logger.warning(f"Failed login attempt for username: {username}")
+            return jsonify({"error": "用户名或密码错误"}), 401
+    
+    except Exception as e:
+        logger.error(f"Error in login endpoint: {e}")
+        return jsonify({"error": "服务器内部错误"}), 500
+
+
+@api_bp.route("/logout", methods=["POST"])
+@login_required
+def logout():
+    """
+    Handle user logout.
+    
+    Returns:
+        JSON response with logout status
+    """
+    try:
+        username = session.get("username")
+        logout_user()
+        logger.info(f"User {username} logged out")
+        return jsonify({
+            "status": "success",
+            "message": "登出成功"
+        })
+    
+    except Exception as e:
+        logger.error(f"Error in logout endpoint: {e}")
+        return jsonify({"error": "服务器内部错误"}), 500
+
+
+@api_bp.route("/auth/status")
+def auth_status():
+    """
+    Check authentication status.
+    
+    Returns:
+        JSON response with authentication status
+    """
+    try:
+        from utils.auth import is_authenticated
+        authenticated = is_authenticated()
+        username = session.get("username") if authenticated else None
+        
+        return jsonify({
+            "authenticated": authenticated,
+            "username": username
+        })
+    
+    except Exception as e:
+        logger.error(f"Error in auth status endpoint: {e}")
+        return jsonify({"error": "服务器内部错误"}), 500
+
+
 @api_bp.route("/generate", methods=["POST"])
+@login_required
 def generate_code():
     """
     Initiate code generation workflow.
@@ -93,6 +177,7 @@ def generate_code():
 
 
 @api_bp.route("/stream/<session_id>")
+@login_required
 def stream_messages(session_id: str):
     """
     Stream real-time agent messages using Server-Sent Events.
@@ -150,6 +235,7 @@ def stream_messages(session_id: str):
 
 
 @api_bp.route("/user_input", methods=["POST"])
+@login_required
 def handle_user_input():
     """
     Handle user input messages during agent collaboration.
@@ -219,6 +305,7 @@ def handle_user_input():
 
 
 @api_bp.route("/approve", methods=["POST"])
+@login_required
 def approve_code():
     """
     Handle user approval or rejection of generated code.
@@ -285,6 +372,7 @@ def approve_code():
 
 
 @api_bp.route("/status/<session_id>")
+@login_required
 def get_session_status(session_id: str):
     """
     Get session status and information.
@@ -339,6 +427,7 @@ def debug_sessions():
 
 
 @api_bp.route("/models")
+@login_required
 def list_models():
     """
     List available model configurations.
