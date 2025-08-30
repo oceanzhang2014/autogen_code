@@ -473,7 +473,7 @@ def _extract_code_from_message(content: str) -> Optional[str]:
 async def _run_iterative_collaboration(agents: dict, request: CodeGenerationRequest,
                                      stream, session_id: str, user_input_queue: asyncio.Queue) -> None:
     """
-    Run iterative collaboration loop between agents.
+    Run iterative collaboration loop between agents with continuous user feedback support.
     
     Args:
         agents: Dictionary containing generator, checker, optimizer, and user_proxy agents
@@ -484,7 +484,6 @@ async def _run_iterative_collaboration(agents: dict, request: CodeGenerationRequ
     """
     max_iterations = getattr(request, 'max_iterations', 3)
     min_quality_score = 95
-    current_iteration = 0
     
     # Get agents from the provided dictionary
     generator = agents.get("generator")
@@ -496,7 +495,7 @@ async def _run_iterative_collaboration(agents: dict, request: CodeGenerationRequ
         logger.error(f"Available agents: {list(agents.keys())}")
         raise ValueError("Missing required agents in team")
     
-    # Create initial task message
+    # Initialize for first iteration
     current_requirements = f"""
     Generate {request.language} code for the following requirements:
     
@@ -509,177 +508,189 @@ async def _run_iterative_collaboration(agents: dict, request: CodeGenerationRequ
     
     latest_code = None
     
-    while current_iteration < max_iterations:
-        current_iteration += 1
+    # Main loop to handle multiple user feedback cycles
+    while True:
+        current_iteration = 0
         
-        # Send iteration start message
-        stream.put(json.dumps({
-            "type": "system",
-            "message": f"开始第 {current_iteration} 轮迭代优化",
-            "timestamp": datetime.now().isoformat()
-        }))
-        
-        # Step 1: Code Generator creates/improves code
-        generator_prompt = current_requirements if current_iteration == 1 else f"""
-        基于以下反馈改进代码：
-        
-        {current_requirements}
-        
-        请只输出完整的优化后代码，不要包含解释性文字。
-        """
-        
-        generator_response = await _get_agent_response(generator, generator_prompt, stream)
-        latest_code = _extract_code_from_message(generator_response)
-        
-        # Step 2: Quality Checker evaluates the code
-        checker_prompt = f"""
-        请评估以下代码的质量：
-        
-        ```{request.language}
-        {latest_code if latest_code else generator_response}
-        ```
-        
-        请提供详细的质量分析和具体的评分。
-        """
-        
-        checker_response = await _get_agent_response(checker, checker_prompt, stream)
-        
-        # Extract quality score
-        quality_score = None
-        if hasattr(checker, 'extract_quality_score'):
-            quality_score = checker.extract_quality_score(checker_response)
-        
-        # Send score update to frontend
-        if quality_score is not None:
-            stream.put(json.dumps({
-                "type": "quality_score", 
-                "score": quality_score,
-                "iteration": current_iteration,
-                "timestamp": datetime.now().isoformat()
-            }))
-        
-        # Check if quality threshold is met
-        if quality_score is not None and quality_score >= min_quality_score:
+        # Inner loop for iterative optimization
+        while current_iteration < max_iterations:
+            current_iteration += 1
+            
+            # Send iteration start message
             stream.put(json.dumps({
                 "type": "system",
-                "message": f"代码质量达到 {quality_score} 分，超过阈值 {min_quality_score} 分",
+                "message": f"开始第 {current_iteration} 轮迭代优化",
                 "timestamp": datetime.now().isoformat()
             }))
-            break
             
-        # Step 3: Code Optimizer suggests improvements (if not final iteration)
-        if current_iteration < max_iterations:
-            optimizer_prompt = f"""
-            基于以下代码和质量评估，提供具体的优化建议：
+            # Step 1: Code Generator creates/improves code
+            generator_prompt = current_requirements if current_iteration == 1 else f"""
+            基于以下反馈改进代码：
             
-            代码：
+            {current_requirements}
+            
+            请只输出完整的优化后代码，不要包含解释性文字。
+            """
+            
+            generator_response = await _get_agent_response(generator, generator_prompt, stream)
+            latest_code = _extract_code_from_message(generator_response)
+            
+            # Show intermediate code to user immediately after generation
+            if latest_code:
+                stream.put(json.dumps({
+                    "type": "code_output",
+                    "code": latest_code,
+                    "language": request.language,
+                    "iteration": current_iteration,
+                    "final_score": None,  # Will be updated after quality check
+                    "timestamp": datetime.now().isoformat()
+                }))
+            
+            # Step 2: Quality Checker evaluates the code
+            checker_prompt = f"""
+            请评估以下代码的质量：
+            
             ```{request.language}
             {latest_code if latest_code else generator_response}
             ```
             
-            质量评估：
-            {checker_response}
-            
-            请提供具体的优化建议和改进方向。
+            请提供详细的质量分析和具体的评分。
             """
             
-            optimizer_response = await _get_agent_response(optimizer, optimizer_prompt, stream)
+            checker_response = await _get_agent_response(checker, checker_prompt, stream)
             
-            # Prepare requirements for next iteration
+            # Extract quality score
+            quality_score = None
+            if hasattr(checker, 'extract_quality_score'):
+                quality_score = checker.extract_quality_score(checker_response)
+            
+            # Send score update to frontend
+            if quality_score is not None:
+                stream.put(json.dumps({
+                    "type": "quality_score", 
+                    "score": quality_score,
+                    "iteration": current_iteration,
+                    "timestamp": datetime.now().isoformat()
+                }))
+            
+            # Check if quality threshold is met
+            if quality_score is not None and quality_score >= min_quality_score:
+                stream.put(json.dumps({
+                    "type": "system",
+                    "message": f"代码质量达到 {quality_score} 分，超过阈值 {min_quality_score} 分",
+                    "timestamp": datetime.now().isoformat()
+                }))
+                break
+                
+            # Step 3: Code Optimizer suggests improvements (if not final iteration)
+            if current_iteration < max_iterations:
+                optimizer_prompt = f"""
+                基于以下代码和质量评估，提供具体的优化建议：
+                
+                代码：
+                ```{request.language}
+                {latest_code if latest_code else generator_response}
+                ```
+                
+                质量评估：
+                {checker_response}
+                
+                请提供具体的优化建议和改进方向。
+                """
+                
+                optimizer_response = await _get_agent_response(optimizer, optimizer_prompt, stream)
+                
+                # Prepare requirements for next iteration
+                current_requirements = f"""
+                原始需求：{request.requirements}
+                
+                当前代码：
+                ```{request.language}
+                {latest_code if latest_code else generator_response}
+                ```
+                
+                质量评估：{checker_response}
+                
+                优化建议：{optimizer_response}
+                """
+        
+        # Send final code to frontend FIRST for immediate display
+        if latest_code:
+            stream.put(json.dumps({
+                "type": "code_output",
+                "code": latest_code,
+                "language": request.language,
+                "iteration": current_iteration,
+                "final_score": quality_score,
+                "timestamp": datetime.now().isoformat()
+            }))
+        
+        # Then notify completion
+        stream.put(json.dumps({
+            "type": "system", 
+            "message": f"✅ 迭代优化完成（{current_iteration} 轮），质量评分 {quality_score if quality_score else '未评分'}/100",
+            "timestamp": datetime.now().isoformat()
+        }))
+        
+        # Get user approval/feedback - this will ALWAYS show the input box
+        user_prompt = f"""
+        🎯 代码生成已完成！
+        
+        📊 迭代轮次：{current_iteration} 轮
+        📈 质量评分：{quality_score if quality_score else '未评分'}/100
+        
+        请审核上方的最终代码并选择：
+        ✅ 批准代码（输入 APPROVE）
+        📝 提供修改建议（输入具体建议）
+        🔚 终止会话（输入 TERMINATE）
+        """
+        
+        # Send input request immediately after code display
+        stream.put(json.dumps({
+            "type": "input_request",
+            "prompt": user_prompt,
+            "timestamp": datetime.now().isoformat(),
+            "session_id": session_id
+        }))
+        
+        user_response = await _get_user_input(user_proxy, user_prompt, user_input_queue)
+        
+        if user_response.upper() == "APPROVE":
+            stream.put(json.dumps({
+                "type": "system",
+                "message": "用户已批准最终代码",
+                "timestamp": datetime.now().isoformat()
+            }))
+            break  # Exit the main loop
+        elif user_response.upper() == "TERMINATE":
+            stream.put(json.dumps({
+                "type": "system", 
+                "message": "用户终止了会话",
+                "timestamp": datetime.now().isoformat()
+            }))
+            break  # Exit the main loop
+        else:
+            # User provided feedback, prepare for new iteration cycle
+            stream.put(json.dumps({
+                "type": "system",
+                "message": "收到用户反馈，开始新的优化循环",
+                "timestamp": datetime.now().isoformat()
+            }))
+            
+            # Update requirements with user feedback for next cycle
             current_requirements = f"""
-            原始需求：{request.requirements}
+            用户反馈：{user_response}
             
             当前代码：
             ```{request.language}
-            {latest_code if latest_code else generator_response}
+            {latest_code}
             ```
             
-            质量评估：{checker_response}
-            
-            优化建议：{optimizer_response}
+            请根据用户反馈进行改进。
             """
-    
-    # After iteration loop, involve user proxy for final approval
-    stream.put(json.dumps({
-        "type": "system", 
-        "message": f"迭代优化完成（{current_iteration} 轮），等待用户确认",
-        "timestamp": datetime.now().isoformat()
-    }))
-    
-    # Send final code to frontend
-    if latest_code:
-        stream.put(json.dumps({
-            "type": "code_output",
-            "code": latest_code,
-            "language": request.language,
-            "iteration": current_iteration,
-            "final_score": quality_score,
-            "timestamp": datetime.now().isoformat()
-        }))
-    
-    # Get user approval/feedback
-    user_prompt = f"""
-    代码优化已完成 {current_iteration} 轮迭代。
-    
-    最终质量评分：{quality_score if quality_score else '未评分'}/100
-    
-    请审核最终代码并选择：
-    1. 批准代码（输入 APPROVE）
-    2. 提供修改建议（输入具体建议）
-    3. 终止会话（输入 TERMINATE）
-    """
-    
-    # Send input request directly to stream for frontend display
-    stream.put(json.dumps({
-        "type": "input_request",
-        "prompt": user_prompt,
-        "timestamp": datetime.now().isoformat(),
-        "session_id": session_id
-    }))
-    
-    user_response = await _get_user_input(user_proxy, user_prompt, user_input_queue)
-    
-    if user_response.upper() == "APPROVE":
-        stream.put(json.dumps({
-            "type": "system",
-            "message": "用户已批准最终代码",
-            "timestamp": datetime.now().isoformat()
-        }))
-    elif user_response.upper() == "TERMINATE":
-        stream.put(json.dumps({
-            "type": "system", 
-            "message": "用户终止了会话",
-            "timestamp": datetime.now().isoformat()
-        }))
-    else:
-        # User provided feedback, start new iteration cycle
-        stream.put(json.dumps({
-            "type": "system",
-            "message": "收到用户反馈，开始新的优化循环",
-            "timestamp": datetime.now().isoformat()
-        }))
-        
-        # Update requirements with user feedback
-        feedback_requirements = f"""
-        用户反馈：{user_response}
-        
-        当前代码：
-        ```{request.language}
-        {latest_code}
-        ```
-        
-        请根据用户反馈进行改进。
-        """
-        
-        # Create new request object for new cycle with user feedback
-        from models.config import CodeGenerationRequest
-        feedback_request = CodeGenerationRequest(
-            requirements=feedback_requirements,
-            language=request.language,
-            context=request.context,
-            max_iterations=getattr(request, 'max_iterations', 3)
-        )
-        await _run_iterative_collaboration(agents, feedback_request, stream, session_id, user_input_queue)
+            
+            # Continue the main loop with updated requirements
+            # The loop will automatically restart with the new requirements
 
 
 async def _get_agent_response(agent, prompt: str, stream, max_retries: int = 3) -> str:
