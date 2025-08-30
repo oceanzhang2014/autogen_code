@@ -35,12 +35,9 @@ def create_app(testing: bool = False) -> Flask:
     # Enable CORS for frontend communication
     CORS(app, origins=["http://localhost:3000", "http://localhost:5011"])
     
-    # Configure logging
+    # Configure logging - already configured in run.py
     log_level = os.getenv("LOG_LEVEL", "INFO")
-    logging.basicConfig(
-        level=getattr(logging, log_level),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    logging.getLogger().setLevel(getattr(logging, log_level))
     
     # Register blueprints
     from web.routes import api_bp
@@ -51,6 +48,12 @@ def create_app(testing: bool = False) -> Flask:
     def health_check():
         """Health check endpoint."""
         return {"status": "healthy", "service": "autogen-multi-agent-system"}
+    
+    # Static file routes
+    @app.route("/favicon.ico")
+    def favicon():
+        """Serve favicon."""
+        return app.send_static_file("favicon.ico")
     
     # Authentication routes
     @app.route("/login.html")

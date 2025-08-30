@@ -106,7 +106,7 @@ def setup_logging():
     log_file = 'autogen_system.log'
     
     # Rotate log file before setting up new logging
-    rotate_log_file(log_file, max_lines=500)
+    rotate_log_file(log_file, max_lines=1000)
     
     logging.basicConfig(
         level=getattr(logging, log_level),

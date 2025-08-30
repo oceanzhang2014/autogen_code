@@ -12,8 +12,20 @@ class CodeGeneratorApp {
         // Set global reference for code copying
         window.codeApp = this;
         
+        // Determine API base path
+        this.apiBase = this.getApiBasePath();
+        
         this.initializeElements();
         this.attachEventListeners();
+    }
+    
+    getApiBasePath() {
+        // Determine the correct API path based on current URL
+        const currentPath = window.location.pathname;
+        if (currentPath.includes('/autogen/')) {
+            return '/autogen/api';
+        }
+        return '/api';
     }
     
     initializeElements() {
@@ -111,7 +123,7 @@ class CodeGeneratorApp {
         this.hideOutputPanel();
         
         try {
-            const response = await fetch('/api/generate', {
+            const response = await fetch(`${this.apiBase}/generate`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -144,7 +156,7 @@ class CodeGeneratorApp {
             this.eventSource.close();
         }
         
-        this.eventSource = new EventSource(`/api/stream/${sessionId}`);
+        this.eventSource = new EventSource(`${this.apiBase}/stream/${sessionId}`);
         
         this.eventSource.onmessage = (event) => {
             try {
@@ -525,7 +537,7 @@ class CodeGeneratorApp {
         }
         
         try {
-            const response = await fetch('/api/approve', {
+            const response = await fetch(`${this.apiBase}/approve`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -585,7 +597,7 @@ class CodeGeneratorApp {
         console.log(`Message content: ${message}`);
         
         try {
-            const response = await fetch('/api/user_input', {
+            const response = await fetch(`${this.apiBase}/user_input`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -638,7 +650,7 @@ class CodeGeneratorApp {
         }
         
         try {
-            const response = await fetch('/api/user_input', {
+            const response = await fetch(`${this.apiBase}/user_input`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -702,7 +714,7 @@ class CodeGeneratorApp {
         }
         
         try {
-            const response = await fetch('/api/approve', {
+            const response = await fetch(`${this.apiBase}/approve`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -783,7 +795,7 @@ class CodeGeneratorApp {
             console.log(`Checking status for session: ${this.currentSessionId}`);
             
             // First, check debug endpoint to see all sessions
-            const debugResponse = await fetch('/api/debug_sessions');
+            const debugResponse = await fetch(`${this.apiBase}/debug_sessions`);
             if (debugResponse.ok) {
                 const debugData = await debugResponse.json();
                 console.log('All sessions:', debugData);
@@ -796,7 +808,7 @@ class CodeGeneratorApp {
             }
             
             // Try status endpoint
-            const statusResponse = await fetch(`/api/status/${this.currentSessionId}`);
+            const statusResponse = await fetch(`${this.apiBase}/status/${this.currentSessionId}`);
             if (statusResponse.ok) {
                 const statusData = await statusResponse.json();
                 console.log('Session status:', statusData);
