@@ -70,6 +70,12 @@
                 <!-- User Input Area -->
                 <div id="user-input-area" class="user-input-area" style="display: none;">
                     <div class="input-prompt" id="input-prompt"></div>
+                    
+                    <!-- Code Actions (shown when final code is available) -->
+                    <div id="code-actions" class="code-actions" style="display: none;">
+                        <button id="copy-code-btn" class="btn-secondary">📋 复制代码</button>
+                    </div>
+                    
                     <div class="input-form">
                         <div class="input-controls">
                             <textarea id="user-input-text" placeholder="请输入您的修改意见或反馈..." rows="4"></textarea>
@@ -85,19 +91,6 @@
                 </div>
             </div>
 
-            <!-- Final Code Output -->
-            <div class="output-panel" id="output-panel" style="display: none;">
-                <div class="output-header">
-                    <h2>生成的代码</h2>
-                    <span class="final-code-language">PYTHON</span>
-                </div>
-                <div class="code-actions">
-                    <button id="copy-code-btn" class="btn-secondary">📋 复制代码</button>
-                    <button id="approve-btn" class="btn-success">✅ 批准</button>
-                    <button id="reject-btn" class="btn-danger">❌ 请求修改</button>
-                </div>
-                <pre id="final-code"><code></code></pre>
-            </div>
 
             <!-- Approval Modal -->
             <div id="feedback-modal" class="modal" style="display: none;">

@@ -39,7 +39,8 @@
       "Bash(conda activate:*)",
       "Bash(curl:*)",
       "Bash(wmic:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(node:*)"
     ],
     "deny": []
   }

@@ -236,12 +236,14 @@ async def create_agent_team(session_id: str, language: str, user_input_queue: as
     optimizer = await create_code_optimizer(optimizer_client, config_loader)
     user_proxy = await create_user_proxy(session_id, user_input_queue)
     
-    # Create termination condition (both APPROVE and TERMINATE will end the session)
+    # Create termination condition for iterative workflow
+    # Note: Termination will be handled by the iterative collaboration logic
+    # The team itself doesn't need complex termination since we control the flow
     approve_termination = TextMentionTermination("APPROVE", sources=["user_proxy"])
     terminate_termination = TextMentionTermination("TERMINATE", sources=["user_proxy"])
     termination = approve_termination | terminate_termination
     
-    # Create team with round-robin collaboration
+    # Create team for iterative collaboration (not round-robin since we control the flow)
     team = RoundRobinGroupChat(
         [generator, checker, optimizer, user_proxy],
         termination_condition=termination
@@ -254,7 +256,7 @@ async def create_agent_team(session_id: str, language: str, user_input_queue: as
 async def run_agent_team(team: RoundRobinGroupChat, request: CodeGenerationRequest, 
                         stream, session_id: str, session_manager) -> None:
     """
-    Run the agent team collaboration.
+    Run the agent team collaboration with iterative optimization loop.
     
     Args:
         team: Agent team
@@ -277,23 +279,43 @@ async def run_agent_team(team: RoundRobinGroupChat, request: CodeGenerationReque
             _monitor_user_input_requests(user_input_queue, stream, session_id)
         )
         
-        # Create initial task message
-        task_message = f"""
-        Generate {request.language} code for the following requirements:
+        # Get agents from the team
+        session_agents = session_data.get("agents")
+        if not session_agents:
+            # Create and store agents for reuse
+            from agents.code_generator import create_code_generator
+            from agents.quality_checker import create_quality_checker  
+            from agents.code_optimizer import create_code_optimizer
+            from agents.user_proxy import create_user_proxy
+            from models.providers import get_model_manager
+            from models.config import ConfigLoader
+            
+            config_loader = ConfigLoader()
+            model_manager = get_model_manager()
+            
+            # Create model clients
+            generator_client = await model_manager.get_client_with_fallback("deepseek")
+            checker_client = await model_manager.get_client_with_fallback("deepseek")
+            optimizer_client = await model_manager.get_client_with_fallback("alibaba")
+            
+            # Create agents
+            generator = await create_code_generator(generator_client, config_loader)
+            checker = await create_quality_checker(checker_client, config_loader)
+            optimizer = await create_code_optimizer(optimizer_client, config_loader)
+            user_proxy = await create_user_proxy(session_id, user_input_queue)
+            
+            session_agents = {
+                "generator": generator,
+                "checker": checker,
+                "optimizer": optimizer,
+                "user_proxy": user_proxy
+            }
+            
+            # Store agents in session for reuse
+            session_data["agents"] = session_agents
         
-        {request.requirements}
-        
-        Additional context: {request.context or 'None provided'}
-        
-        Please collaborate to create high-quality, well-documented code that follows best practices.
-        """
-        
-        # Run the team with streaming
-        async for message in team.run_stream(
-            task=[TextMessage(content=task_message, source="user")],
-            cancellation_token=CancellationToken()
-        ):
-            await _handle_team_message(message, stream, session_id)
+        # Run iterative collaboration loop with individual agents
+        await _run_iterative_collaboration(session_agents, request, stream, session_id, user_input_queue)
         
         # Cancel the input monitor task
         input_monitor_task.cancel()
@@ -446,3 +468,370 @@ def _extract_code_from_message(content: str) -> Optional[str]:
             return longest_inline.strip()
     
     return None
+
+
+async def _run_iterative_collaboration(agents: dict, request: CodeGenerationRequest,
+                                     stream, session_id: str, user_input_queue: asyncio.Queue) -> None:
+    """
+    Run iterative collaboration loop between agents.
+    
+    Args:
+        agents: Dictionary containing generator, checker, optimizer, and user_proxy agents
+        request: Code generation request
+        stream: Message stream for real-time updates
+        session_id: Session identifier
+        user_input_queue: Queue for user input
+    """
+    max_iterations = getattr(request, 'max_iterations', 3)
+    min_quality_score = 95
+    current_iteration = 0
+    
+    # Get agents from the provided dictionary
+    generator = agents.get("generator")
+    checker = agents.get("checker") 
+    optimizer = agents.get("optimizer")
+    user_proxy = agents.get("user_proxy")
+    
+    if not all([generator, checker, optimizer, user_proxy]):
+        logger.error(f"Available agents: {list(agents.keys())}")
+        raise ValueError("Missing required agents in team")
+    
+    # Create initial task message
+    current_requirements = f"""
+    Generate {request.language} code for the following requirements:
+    
+    {request.requirements}
+    
+    Additional context: {request.context or 'None provided'}
+    
+    Please create high-quality, well-documented code that follows best practices.
+    """
+    
+    latest_code = None
+    
+    while current_iteration < max_iterations:
+        current_iteration += 1
+        
+        # Send iteration start message
+        stream.put(json.dumps({
+            "type": "system",
+            "message": f"开始第 {current_iteration} 轮迭代优化",
+            "timestamp": datetime.now().isoformat()
+        }))
+        
+        # Step 1: Code Generator creates/improves code
+        generator_prompt = current_requirements if current_iteration == 1 else f"""
+        基于以下反馈改进代码：
+        
+        {current_requirements}
+        
+        请只输出完整的优化后代码，不要包含解释性文字。
+        """
+        
+        generator_response = await _get_agent_response(generator, generator_prompt, stream)
+        latest_code = _extract_code_from_message(generator_response)
+        
+        # Step 2: Quality Checker evaluates the code
+        checker_prompt = f"""
+        请评估以下代码的质量：
+        
+        ```{request.language}
+        {latest_code if latest_code else generator_response}
+        ```
+        
+        请提供详细的质量分析和具体的评分。
+        """
+        
+        checker_response = await _get_agent_response(checker, checker_prompt, stream)
+        
+        # Extract quality score
+        quality_score = None
+        if hasattr(checker, 'extract_quality_score'):
+            quality_score = checker.extract_quality_score(checker_response)
+        
+        # Send score update to frontend
+        if quality_score is not None:
+            stream.put(json.dumps({
+                "type": "quality_score", 
+                "score": quality_score,
+                "iteration": current_iteration,
+                "timestamp": datetime.now().isoformat()
+            }))
+        
+        # Check if quality threshold is met
+        if quality_score is not None and quality_score >= min_quality_score:
+            stream.put(json.dumps({
+                "type": "system",
+                "message": f"代码质量达到 {quality_score} 分，超过阈值 {min_quality_score} 分",
+                "timestamp": datetime.now().isoformat()
+            }))
+            break
+            
+        # Step 3: Code Optimizer suggests improvements (if not final iteration)
+        if current_iteration < max_iterations:
+            optimizer_prompt = f"""
+            基于以下代码和质量评估，提供具体的优化建议：
+            
+            代码：
+            ```{request.language}
+            {latest_code if latest_code else generator_response}
+            ```
+            
+            质量评估：
+            {checker_response}
+            
+            请提供具体的优化建议和改进方向。
+            """
+            
+            optimizer_response = await _get_agent_response(optimizer, optimizer_prompt, stream)
+            
+            # Prepare requirements for next iteration
+            current_requirements = f"""
+            原始需求：{request.requirements}
+            
+            当前代码：
+            ```{request.language}
+            {latest_code if latest_code else generator_response}
+            ```
+            
+            质量评估：{checker_response}
+            
+            优化建议：{optimizer_response}
+            """
+    
+    # After iteration loop, involve user proxy for final approval
+    stream.put(json.dumps({
+        "type": "system", 
+        "message": f"迭代优化完成（{current_iteration} 轮），等待用户确认",
+        "timestamp": datetime.now().isoformat()
+    }))
+    
+    # Send final code to frontend
+    if latest_code:
+        stream.put(json.dumps({
+            "type": "code_output",
+            "code": latest_code,
+            "language": request.language,
+            "iteration": current_iteration,
+            "final_score": quality_score,
+            "timestamp": datetime.now().isoformat()
+        }))
+    
+    # Get user approval/feedback
+    user_prompt = f"""
+    代码优化已完成 {current_iteration} 轮迭代。
+    
+    最终质量评分：{quality_score if quality_score else '未评分'}/100
+    
+    请审核最终代码并选择：
+    1. 批准代码（输入 APPROVE）
+    2. 提供修改建议（输入具体建议）
+    3. 终止会话（输入 TERMINATE）
+    """
+    
+    # Send input request directly to stream for frontend display
+    stream.put(json.dumps({
+        "type": "input_request",
+        "prompt": user_prompt,
+        "timestamp": datetime.now().isoformat(),
+        "session_id": session_id
+    }))
+    
+    user_response = await _get_user_input(user_proxy, user_prompt, user_input_queue)
+    
+    if user_response.upper() == "APPROVE":
+        stream.put(json.dumps({
+            "type": "system",
+            "message": "用户已批准最终代码",
+            "timestamp": datetime.now().isoformat()
+        }))
+    elif user_response.upper() == "TERMINATE":
+        stream.put(json.dumps({
+            "type": "system", 
+            "message": "用户终止了会话",
+            "timestamp": datetime.now().isoformat()
+        }))
+    else:
+        # User provided feedback, start new iteration cycle
+        stream.put(json.dumps({
+            "type": "system",
+            "message": "收到用户反馈，开始新的优化循环",
+            "timestamp": datetime.now().isoformat()
+        }))
+        
+        # Update requirements with user feedback
+        feedback_requirements = f"""
+        用户反馈：{user_response}
+        
+        当前代码：
+        ```{request.language}
+        {latest_code}
+        ```
+        
+        请根据用户反馈进行改进。
+        """
+        
+        # Create new request object for new cycle with user feedback
+        from models.config import CodeGenerationRequest
+        feedback_request = CodeGenerationRequest(
+            requirements=feedback_requirements,
+            language=request.language,
+            context=request.context,
+            max_iterations=getattr(request, 'max_iterations', 3)
+        )
+        await _run_iterative_collaboration(agents, feedback_request, stream, session_id, user_input_queue)
+
+
+async def _get_agent_response(agent, prompt: str, stream, max_retries: int = 3) -> str:
+    """
+    Get response from an agent and stream it to frontend.
+    Support continuation for incomplete code output.
+    
+    Args:
+        agent: The agent to get response from
+        prompt: Prompt to send to agent
+        stream: Stream for real-time updates
+        max_retries: Maximum retry attempts for continuation
+        
+    Returns:
+        str: Agent's response content
+    """
+    try:
+        response_content = ""
+        retry_count = 0
+        
+        while retry_count <= max_retries:
+            current_prompt = prompt if retry_count == 0 else f"""
+请继续输出完整代码，从以下内容继续：
+
+{response_content}
+
+请只输出剩余的代码部分，不要重复已有内容。
+"""
+            
+            # Create message and get response
+            message = TextMessage(content=current_prompt, source="user")
+            chunk_response = ""
+            
+            async for chunk in agent.on_messages_stream([message], CancellationToken()):
+                if hasattr(chunk, 'content'):
+                    chunk_content = chunk.content
+                    chunk_response += chunk_content
+                    
+                    # Stream chunk to frontend
+                    stream.put(json.dumps({
+                        "type": "agent_message",
+                        "agent": agent.name,
+                        "message": chunk_content,
+                        "timestamp": datetime.now().isoformat(),
+                        "is_chunk": True,
+                        "retry_count": retry_count
+                    }))
+            
+            response_content += chunk_response
+            
+            # Check if response seems complete (for code generator)
+            if agent.name == "code_generator":
+                # Check for common completion indicators
+                if _is_code_complete(response_content):
+                    break
+                    
+                # If we got significant content but seems incomplete, try to continue
+                if len(chunk_response.strip()) > 50 and retry_count < max_retries:
+                    retry_count += 1
+                    
+                    # Send continuation message
+                    stream.put(json.dumps({
+                        "type": "system",
+                        "message": f"代码输出可能不完整，正在继续生成... (第{retry_count + 1}次)",
+                        "timestamp": datetime.now().isoformat()
+                    }))
+                    continue
+                else:
+                    break
+            else:
+                # For non-code generators, don't retry
+                break
+        
+        return response_content
+        
+    except Exception as e:
+        logger.error(f"Error getting response from {agent.name}: {e}")
+        return f"Error: Failed to get response from {agent.name}"
+
+
+def _is_code_complete(code_content: str) -> bool:
+    """
+    Check if code output appears to be complete.
+    
+    Args:
+        code_content: The code content to check
+        
+    Returns:
+        bool: True if code appears complete
+    """
+    # Remove code block markers for analysis
+    clean_content = code_content.strip()
+    if clean_content.startswith('```'):
+        lines = clean_content.split('\n')
+        if len(lines) > 1:
+            # Remove first line (```language)
+            lines = lines[1:]
+            # Check if ends with ```
+            if lines and lines[-1].strip() == '```':
+                lines = lines[:-1]
+            clean_content = '\n'.join(lines)
+    
+    # Basic completeness checks
+    checks = [
+        # Check for balanced braces (for most languages)
+        clean_content.count('{') == clean_content.count('}'),
+        # Check for balanced parentheses
+        clean_content.count('(') == clean_content.count(')'),
+        # Check for balanced brackets
+        clean_content.count('[') == clean_content.count(']'),
+        # Check it doesn't end abruptly (not just whitespace)
+        len(clean_content.strip()) > 0,
+        # Check it doesn't end with incomplete line
+        not clean_content.rstrip().endswith(('=', '+', '-', '*', '/', '\\', ',', '&', '|'))
+    ]
+    
+    # If most checks pass, consider it complete
+    passed_checks = sum(checks)
+    return passed_checks >= len(checks) - 1  # Allow one check to fail
+
+
+async def _get_user_input(user_proxy, prompt: str, user_input_queue: asyncio.Queue) -> str:
+    """
+    Get input from user through user proxy agent.
+    
+    Args:
+        user_proxy: User proxy agent
+        prompt: Prompt to display to user
+        user_input_queue: Queue for user input
+        
+    Returns:
+        str: User's input response
+    """
+    try:
+        # Wait for user response from the input queue
+        while True:
+            response = await asyncio.wait_for(user_input_queue.get(), timeout=600.0)  # 5 minute timeout
+            
+            # Skip any input_request messages we put in the queue
+            if (isinstance(response, dict) and 
+                response.get("type") == "input_request"):
+                continue
+                
+            if (isinstance(response, dict) and 
+                response.get("type") == "user_input"):
+                content = response.get("content", "No input provided")
+                logger.info(f"Received user input: {content}")
+                return content
+                
+    except asyncio.TimeoutError:
+        logger.warning("User input timeout after 10 minutes")
+        return "TERMINATE"  # Auto-terminate on timeout
+    except Exception as e:
+        logger.error(f"Error getting user input: {e}")
+        return "Error: Failed to get user input"

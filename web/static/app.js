@@ -35,13 +35,10 @@ class CodeGeneratorApp {
         
         // Display elements
         this.conversation = document.getElementById('conversation');
-        this.outputPanel = document.getElementById('output-panel');
-        this.finalCode = document.getElementById('final-code');
+        this.codeActions = document.getElementById('code-actions');
         
         // Action buttons
         this.copyCodeBtn = document.getElementById('copy-code-btn');
-        this.approveBtn = document.getElementById('approve-btn');
-        this.rejectBtn = document.getElementById('reject-btn');
         
         // Modal elements
         this.feedbackModal = document.getElementById('feedback-modal');
@@ -63,8 +60,6 @@ class CodeGeneratorApp {
         
         // Action buttons
         this.copyCodeBtn.addEventListener('click', () => this.copyCode());
-        this.approveBtn.addEventListener('click', () => this.approveCode());
-        this.rejectBtn.addEventListener('click', () => this.showFeedbackModal());
         
         // Modal actions
         this.submitFeedbackBtn.addEventListener('click', () => this.submitFeedback());
@@ -120,7 +115,7 @@ class CodeGeneratorApp {
     async startCodeGeneration(requestData) {
         this.setGenerating(true);
         this.clearConversation();
-        this.hideOutputPanel();
+        this.hideCodeActions();
         
         try {
             const response = await fetch(`${this.apiBase}/generate`, {
@@ -253,7 +248,14 @@ class CodeGeneratorApp {
                 
             case 'code_output':
                 this.resetMessageChain(); // Reset chain for code output
-                this.showFinalCode(data.code, data.language);
+                this.showFinalCode(data.code, data.language, data.iteration, data.final_score);
+                // Also show complete code in dialog for easy viewing
+                this.showCompleteCodeDialog(data.code, data.language, data.iteration, data.final_score);
+                break;
+                
+            case 'quality_score':
+                this.resetMessageChain(); // Reset chain for quality scores
+                this.showQualityScore(data.score, data.iteration);
                 break;
                 
             case 'system':
@@ -491,83 +493,384 @@ class CodeGeneratorApp {
         }
     }
     
-    showFinalCode(code, language) {
-        const codeElement = this.finalCode.querySelector('code');
-        codeElement.textContent = code;
-        codeElement.className = `language-${language}`;
+    showFinalCode(code, language, iteration = null, finalScore = null) {
+        // Store the latest code for copying
+        this.latestCode = code;
+        this.latestLanguage = language;
         
-        // Update language indicator if exists
-        const languageIndicator = this.outputPanel.querySelector('.final-code-language');
-        if (languageIndicator) {
-            languageIndicator.textContent = language.toUpperCase();
+        // Create a final code message in the conversation
+        let messageText = `🎯 **最终代码生成完成**\n\n`;
+        if (iteration !== null) {
+            messageText += `**迭代轮次:** ${iteration}\n`;
         }
+        if (finalScore !== null) {
+            messageText += `**质量评分:** ${finalScore}/100\n`;
+        }
+        messageText += `**编程语言:** ${language.toUpperCase()}\n\n`;
+        messageText += `\`\`\`${language}\n${code}\n\`\`\``;
+        
+        this.resetMessageChain();
+        this.addMessage('system', messageText, new Date().toISOString());
+        
+        // Show the code actions in user input area
+        this.showCodeActions();
+    }
+    
+    showQualityScore(score, iteration) {
+        // Create or update quality score display
+        let scoreElement = document.querySelector('.quality-score-display');
+        
+        if (!scoreElement) {
+            scoreElement = document.createElement('div');
+            scoreElement.className = 'quality-score-display alert alert-info';
+            scoreElement.style.cssText = `
+                margin: 10px 0;
+                padding: 10px 15px;
+                border-radius: 5px;
+                background-color: #d1ecf1;
+                border: 1px solid #bee5eb;
+                color: #0c5460;
+                font-weight: bold;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            `;
+            
+            // Insert before the chat messages container
+            const chatContainer = document.querySelector('.chat-messages');
+            if (chatContainer && chatContainer.parentNode) {
+                chatContainer.parentNode.insertBefore(scoreElement, chatContainer);
+            }
+        }
+        
+        // Update score content
+        const scoreText = `第${iteration}轮迭代 - 质量评分: ${score}/100`;
+        const scoreColor = score >= 95 ? '#155724' : score >= 80 ? '#856404' : '#721c24';
+        const backgroundColor = score >= 95 ? '#d4edda' : score >= 80 ? '#fff3cd' : '#f8d7da';
+        
+        scoreElement.innerHTML = `
+            <span>${scoreText}</span>
+            <span style="font-size: 1.2em;">${score >= 95 ? '✅' : score >= 80 ? '⚠️' : '❌'}</span>
+        `;
+        
+        scoreElement.style.color = scoreColor;
+        scoreElement.style.backgroundColor = backgroundColor;
+        
+        // Scroll to show the score
+        this.scrollToElement(scoreElement);
+    }
+    
+    showCompleteCodeDialog(code, language, iteration = null, finalScore = null) {
+        // Create modal dialog for complete code display
+        const existingModal = document.getElementById('complete-code-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        const modal = document.createElement('div');
+        modal.id = 'complete-code-modal';
+        modal.className = 'modal fade show complete-code-modal';
+        modal.style.cssText = `
+            display: block;
+            background-color: rgba(0, 0, 0, 0.7);
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1050;
+            animation: modalFadeIn 0.3s ease-out;
+        `;
+        
+        const modalDialog = document.createElement('div');
+        modalDialog.className = 'modal-dialog modal-xl complete-code-dialog';
+        modalDialog.style.cssText = `
+            max-width: 95%;
+            width: 95%;
+            height: 95%;
+            margin: 2.5% auto;
+            display: flex;
+            flex-direction: column;
+        `;
+        
+        // Build enhanced title with badges
+        let titleText = `${language.toUpperCase()} 代码`;
+        let badges = '';
+        
+        if (iteration !== null) {
+            badges += `<span class="iteration-badge">第${iteration}轮</span>`;
+        }
+        if (finalScore !== null) {
+            const scoreColor = finalScore >= 95 ? 'success' : finalScore >= 80 ? 'warning' : 'danger';
+            badges += `<span class="score-badge badge-${scoreColor}">质量评分: ${finalScore}/100</span>`;
+        }
+        
+        const codeLines = code.split('\n').length;
+        const codeSize = new Blob([code]).size;
+        const codeSizeKB = (codeSize / 1024).toFixed(1);
+        
+        modalDialog.innerHTML = `
+            <div class="modal-content complete-code-content">
+                <div class="modal-header complete-code-header">
+                    <div class="modal-title-section">
+                        <h4 class="modal-title">
+                            <span class="code-icon">📄</span>
+                            ${titleText}
+                        </h4>
+                        <div class="title-badges">
+                            ${badges}
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close modern-close" onclick="this.closest('.modal').remove()" title="关闭 (ESC)">
+                        <span class="close-icon">✕</span>
+                    </button>
+                </div>
+                
+                <div class="modal-body complete-code-body">
+                    <div class="code-stats-bar">
+                        <div class="code-stats">
+                            <span class="stat-item">
+                                <span class="stat-icon">📏</span>
+                                <span class="stat-label">行数:</span>
+                                <span class="stat-value">${codeLines}</span>
+                            </span>
+                            <span class="stat-item">
+                                <span class="stat-icon">💾</span>
+                                <span class="stat-label">大小:</span>
+                                <span class="stat-value">${codeSizeKB} KB</span>
+                            </span>
+                            <span class="stat-item">
+                                <span class="stat-icon">🔤</span>
+                                <span class="stat-label">语言:</span>
+                                <span class="stat-value">${language.toUpperCase()}</span>
+                            </span>
+                        </div>
+                        <div class="code-actions-bar">
+                            <button class="action-btn copy-btn" onclick="window.codeApp.copyCompleteCode()" title="复制到剪贴板 (Ctrl+C)">
+                                <span class="btn-icon">📋</span>
+                                <span class="btn-text">复制代码</span>
+                            </button>
+                            <button class="action-btn download-btn" onclick="window.codeApp.downloadCode()" title="下载代码文件">
+                                <span class="btn-icon">⬇️</span>
+                                <span class="btn-text">下载</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="code-display-container">
+                        <div class="code-header">
+                            <div class="code-header-left">
+                                <span class="file-icon">📝</span>
+                                <span class="file-name">generated_code.${this.getFileExtension(language)}</span>
+                            </div>
+                            <div class="code-header-right">
+                                <button class="toggle-wrap-btn" onclick="window.codeApp.toggleLineWrap()" title="切换自动换行">
+                                    <span class="wrap-icon">↩️</span>
+                                </button>
+                            </div>
+                        </div>
+                        <pre class="code-display" id="complete-code-pre"><code class="language-${language}" id="complete-code-content">${this.escapeHtml(code)}</code></pre>
+                    </div>
+                </div>
+                
+                <div class="modal-footer complete-code-footer">
+                    <div class="footer-left">
+                        <small class="generation-info">
+                            <span class="info-icon">⏰</span>
+                            生成时间: ${new Date().toLocaleString()}
+                        </small>
+                    </div>
+                    <div class="footer-right">
+                        <button type="button" class="btn btn-secondary close-btn" onclick="this.closest('.modal').remove()">
+                            <span class="btn-icon">❌</span>
+                            关闭
+                        </button>
+                        <button type="button" class="btn btn-primary copy-btn-main" onclick="window.codeApp.copyCompleteCode()">
+                            <span class="btn-icon">📋</span>
+                            复制代码
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        modal.appendChild(modalDialog);
+        document.body.appendChild(modal);
+        
+        // Add keyboard event handlers
+        modal.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                modal.remove();
+            } else if (e.ctrlKey && e.key === 'c') {
+                e.preventDefault();
+                this.copyCompleteCode();
+            }
+        });
+        
+        // Add click outside to close
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
         
         // Apply syntax highlighting
         if (window.Prism) {
+            const codeElement = modal.querySelector('#complete-code-content');
             Prism.highlightElement(codeElement);
         }
         
-        this.outputPanel.style.display = 'block';
-        this.scrollToElement(this.outputPanel);
-    }
-    
-    async copyCode() {
-        const code = this.finalCode.querySelector('code').textContent;
+        // Store code for copying and downloading
+        this.completeCode = code;
+        this.completeCodeLanguage = language;
         
-        try {
-            // 优先使用现代 Clipboard API（仅在 HTTPS 或 localhost 下可用）
-            if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
-                await navigator.clipboard.writeText(code);
-                this.showSuccess('代码已复制到剪贴板！');
-            } else {
-                // 降级到传统方法
-                this.fallbackCopyTextToClipboard(code);
-            }
-        } catch (error) {
-            console.error('复制失败:', error);
-            // 尝试降级方法
-            this.fallbackCopyTextToClipboard(code);
-        }
+        // Focus the modal for keyboard navigation
+        modal.focus();
     }
     
-    async approveCode() {
-        if (!this.currentSessionId) {
-            this.showError('No active session');
+    async copyCompleteCode() {
+        if (!this.completeCode) {
+            this.showError('没有找到要复制的代码');
             return;
         }
         
         try {
-            const response = await fetch(`${this.apiBase}/approve`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    session_id: this.currentSessionId,
-                    action: 'approve'
-                })
-            });
-            
-            if (!response.ok) {
-                let errorMessage = '批准代码失败';
-                try {
-                    const errorData = await response.json();
-                    errorMessage = errorData.error || errorMessage;
-                } catch (e) {
-                    errorMessage = `HTTP错误: ${response.status} ${response.statusText}`;
-                }
-                throw new Error(errorMessage);
+            if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+                await navigator.clipboard.writeText(this.completeCode);
+                this.showSuccess('完整代码已复制到剪贴板！');
+                
+                // Update button text temporarily
+                const copyButtons = document.querySelectorAll('.copy-btn, .copy-btn-main');
+                copyButtons.forEach(btn => {
+                    const originalText = btn.innerHTML;
+                    btn.innerHTML = '<span class="btn-icon">✅</span><span class="btn-text">已复制</span>';
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                    }, 2000);
+                });
+            } else {
+                this.fallbackCopyTextToClipboard(this.completeCode);
             }
-            
-            this.showSuccess('代码批准成功！');
-            this.resetMessageChain(); // Reset chain for approval messages
-            this.addMessage('user_proxy', '用户批准了代码。', new Date().toISOString());
-            
         } catch (error) {
-            console.error('Approve error:', error);
-            this.showError(`批准代码失败: ${error.message}`);
+            console.error('复制失败:', error);
+            this.fallbackCopyTextToClipboard(this.completeCode);
         }
     }
+    
+    downloadCode() {
+        if (!this.completeCode) {
+            this.showError('没有找到要下载的代码');
+            return;
+        }
+        
+        try {
+            const language = this.completeCodeLanguage || 'txt';
+            const extension = this.getFileExtension(language);
+            const filename = `generated_code.${extension}`;
+            
+            const blob = new Blob([this.completeCode], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.style.display = 'none';
+            
+            document.body.appendChild(a);
+            a.click();
+            
+            // Clean up
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            this.showSuccess(`代码已下载为 ${filename}`);
+        } catch (error) {
+            console.error('下载失败:', error);
+            this.showError('下载失败，请重试');
+        }
+    }
+    
+    getFileExtension(language) {
+        const extensions = {
+            'python': 'py',
+            'javascript': 'js',
+            'typescript': 'ts',
+            'java': 'java',
+            'go': 'go',
+            'rust': 'rs',
+            'cpp': 'cpp',
+            'c++': 'cpp',
+            'csharp': 'cs',
+            'c#': 'cs',
+            'php': 'php',
+            'ruby': 'rb',
+            'swift': 'swift',
+            'kotlin': 'kt',
+            'scala': 'scala',
+            'html': 'html',
+            'css': 'css',
+            'sql': 'sql',
+            'shell': 'sh',
+            'bash': 'sh',
+            'yaml': 'yml',
+            'json': 'json',
+            'xml': 'xml',
+            'markdown': 'md'
+        };
+        return extensions[language.toLowerCase()] || 'txt';
+    }
+    
+    toggleLineWrap() {
+        const codeDisplay = document.getElementById('complete-code-pre');
+        const toggleBtn = document.querySelector('.toggle-wrap-btn');
+        
+        if (!codeDisplay || !toggleBtn) return;
+        
+        const isWrapped = codeDisplay.style.whiteSpace === 'pre-wrap';
+        
+        if (isWrapped) {
+            // Switch to no wrap
+            codeDisplay.style.whiteSpace = 'pre';
+            codeDisplay.style.overflowX = 'auto';
+            toggleBtn.innerHTML = '<span class="wrap-icon">↩️</span>';
+            toggleBtn.title = '启用自动换行';
+        } else {
+            // Switch to wrap
+            codeDisplay.style.whiteSpace = 'pre-wrap';
+            codeDisplay.style.overflowX = 'hidden';
+            toggleBtn.innerHTML = '<span class="wrap-icon">📄</span>';
+            toggleBtn.title = '禁用自动换行';
+        }
+    }
+    
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    async copyCode() {
+        if (!this.latestCode) {
+            this.showError('没有找到要复制的代码');
+            return;
+        }
+        
+        try {
+            // 优先使用现代 Clipboard API（仅在 HTTPS 或 localhost 下可用）
+            if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+                await navigator.clipboard.writeText(this.latestCode);
+                this.showSuccess('代码已复制到剪贴板！');
+            } else {
+                // 降级到传统方法
+                this.fallbackCopyTextToClipboard(this.latestCode);
+            }
+        } catch (error) {
+            console.error('复制失败:', error);
+            // 尝试降级方法
+            this.fallbackCopyTextToClipboard(this.latestCode);
+        }
+    }
+    
     
     showUserInput(prompt) {
         this.inputPrompt.textContent = prompt;
@@ -753,9 +1056,9 @@ class CodeGeneratorApp {
         this.generateBtn.disabled = isGenerating;
         
         if (isGenerating) {
-            this.generateBtn.innerHTML = '<span class="loading"></span> Generating...';
+            this.generateBtn.innerHTML = '<span class="loading"></span> 生成中...';
         } else {
-            this.generateBtn.innerHTML = '🚀 Generate Code';
+            this.generateBtn.innerHTML = '🚀 生成代码';
         }
     }
     
@@ -765,8 +1068,16 @@ class CodeGeneratorApp {
         this.lastMessageElement = null;
     }
     
-    hideOutputPanel() {
-        this.outputPanel.style.display = 'none';
+    showCodeActions() {
+        if (this.codeActions) {
+            this.codeActions.style.display = 'flex';
+        }
+    }
+    
+    hideCodeActions() {
+        if (this.codeActions) {
+            this.codeActions.style.display = 'none';
+        }
     }
     
     scrollToBottom() {
