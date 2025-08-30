@@ -33,7 +33,13 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git remote add:*)",
-      "Bash(git remote:*)"
+      "Bash(git remote:*)",
+      "Bash(git checkout:*)",
+      "Bash(taskkill:*)",
+      "Bash(conda activate:*)",
+      "Bash(curl:*)",
+      "Bash(wmic:*)",
+      "Bash(pkill:*)"
     ],
     "deny": []
   }

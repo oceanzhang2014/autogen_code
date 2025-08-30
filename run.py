@@ -124,18 +124,18 @@ def setup_logging():
 
 def print_startup_info():
     """Print startup information and instructions."""
-    print("🤖 AutoGen Multi-Agent Code Generation System")
+    print("AutoGen Multi-Agent Code Generation System")
     print("=" * 50)
     print("")
-    print("🚀 Starting Flask application...")
+    print("Starting Flask application...")
     print("")
-    print("📋 System Components:")
-    print("   • Flask Web Server")
-    print("   • AutoGen Agent Framework") 
-    print("   • Multi-Provider Model Support")
-    print("   • Real-time Streaming Interface")
+    print("System Components:")
+    print("   - Flask Web Server")
+    print("   - AutoGen Agent Framework") 
+    print("   - Multi-Provider Model Support")
+    print("   - Real-time Streaming Interface")
     print("")
-    print("🔧 Available Model Providers:")
+    print("Available Model Providers:")
     
     providers = []
     if os.getenv('DEEPSEEK_API_KEY'):
@@ -151,16 +151,16 @@ def print_startup_info():
     
     if providers:
         for provider in providers:
-            print(f"   ✅ {provider}")
+            print(f"   [X] {provider}")
     else:
-        print("   ⚠️  No providers configured")
+        print("   [!] No providers configured")
     
     print("")
-    print("🌐 Access URLs:")
+    print("Access URLs:")
     port = os.getenv('PORT', '5011')
-    print(f"   • Web Interface: http://localhost:{port}")
-    print(f"   • Health Check:  http://localhost:{port}/health")
-    print(f"   • API Docs:      http://localhost:{port}/api/models")
+    print(f"   - Web Interface: http://localhost:{port}")
+    print(f"   - Health Check:  http://localhost:{port}/health")
+    print(f"   - API Docs:      http://localhost:{port}/api/models")
     print("")
 
 
@@ -187,23 +187,23 @@ def main():
     port = int(os.getenv('PORT', '5011'))
     debug = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
     
-    print("✅ Environment validation passed")
-    print("✅ Configuration files found")
-    print("✅ Application initialized")
+    print("[X] Environment validation passed")
+    print("[X] Configuration files found")
+    print("[X] Application initialized")
     print("")
-    print(f"🌍 Server starting on {host}:{port}")
-    print(f"🐛 Debug mode: Disabled (for stability)")
-    print("💾 Session persistence: Enabled (sessions/ directory)")
-    print("🔄 Auto-reload: Disabled (prevents session loss)")
+    print(f"Server starting on {host}:{port}")
+    print(f"Debug mode: Disabled (for stability)")
+    print("Session persistence: Enabled (sessions/ directory)")
+    print("Auto-reload: Disabled (prevents session loss)")
     print("")
-    print("📖 Usage Instructions:")
+    print("Usage Instructions:")
     print("   1. Open web interface in your browser")
     print("   2. Enter code generation requirements")
     print("   3. Select programming language")
     print("   4. Watch agents collaborate in real-time")
     print("   5. Review and approve/reject final code")
     print("")
-    print("🛑 Press Ctrl+C to stop the server")
+    print("Press Ctrl+C to stop the server")
     print("=" * 50)
     
     try:
@@ -214,7 +214,7 @@ def main():
             del os.environ['WERKZEUG_RUN_MAIN']
             
         # Run Flask application with minimal configuration
-        print(f"🚀 Starting Flask server at {host}:{port}")
+        print(f"Starting Flask server at {host}:{port}")
         app.run(
             host=host,
             port=port,
@@ -223,10 +223,10 @@ def main():
             threaded=True
         )
     except KeyboardInterrupt:
-        print("\n\n👋 Shutting down gracefully...")
+        print("\n\nShutting down gracefully...")
         print("Thank you for using AutoGen Multi-Agent System!")
     except Exception as e:
-        print(f"\n❌ Application error: {e}")
+        print(f"\nApplication error: {e}")
         print(f"Error type: {type(e).__name__}")
         import traceback
         print(f"Traceback: {traceback.format_exc()}")

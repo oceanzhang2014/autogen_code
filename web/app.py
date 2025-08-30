@@ -64,6 +64,23 @@ def create_app(testing: bool = False) -> Flask:
         """Serve main frontend page."""
         from utils.auth import is_authenticated
         if not is_authenticated():
+            # Check if we're running under a path prefix (like /autogen/)
+            forwarded_prefix = request.headers.get('X-Forwarded-Prefix', '')
+            print(f"DEBUG: X-Forwarded-Prefix header: '{forwarded_prefix}'")
+            print(f"DEBUG: Request path: {request.path}")
+            print(f"DEBUG: Host header: {request.headers.get('Host', '')}")
+            
+            # Check all headers that might indicate path prefix
+            for header in ['X-Forwarded-Prefix', 'X-Script-Name', 'X-Original-URI']:
+                value = request.headers.get(header, '')
+                if value:
+                    print(f"DEBUG: {header}: {value}")
+            
+            if forwarded_prefix:
+                redirect_url = f"{forwarded_prefix}/login.html"
+                print(f"DEBUG: Redirecting to: {redirect_url}")
+                return redirect(redirect_url)
+            print("DEBUG: Redirecting to: /login.html")
             return redirect("/login.html")
         return app.send_static_file("index.html")
     
